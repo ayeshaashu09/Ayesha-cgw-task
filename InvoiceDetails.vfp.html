@@ -1,0 +1,43 @@
+<apex:page showHeader="false" sidebar="false" controller="InvoiceController">
+    <apex:form>
+        <apex:pageBlock title="Invoice Details">
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>Origin Record</th>
+                        <th>Account</th>
+                        <th>Invoice Date</th>
+                        <th>Invoice Due Date</th>
+                        <th>Child Relationship Name</th>
+                        <th>Line Item Description</th>
+                        <th>Line Item Quantity</th>
+                        <th>Line Item Unit Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Static row for Invoice Header -->
+                    <tr>
+                        <td>{!originRecord}</td>
+                        <td>{!account}</td>
+                        <td>{!invoiceDate}</td>
+                        <td>{!invoiceDueDate}</td>
+                        <td>{!childRelationshipName}</td>
+                    </tr>
+
+                    <!-- Dynamic rows for Line Items -->
+                    <apex:repeat value="{!lineItems}" var="item">
+                        <tr>
+                            <td colspan="5"></td> <!-- Empty cells for alignment -->
+                            <td>{!item.Description__c}</td>
+                            <td>{!item.Quantity__c}</td>
+                            <td>{!item.Total_Article_price__c}</td>
+                        </tr>
+                    </apex:repeat>
+                </tbody>
+            </table>
+            
+              <apex:commandButton action="{!showJSON}" value="SHOW JSON" />
+
+        </apex:pageBlock>
+    </apex:form>
+</apex:page>

@@ -1,0 +1,9 @@
+<apex:page showHeader="false" sidebar="false" controller="InvoiceController">
+     <apex:form>
+    <pre>
+        {!$CurrentPage.parameters.jsonString}
+    </pre>
+    
+     <apex:commandButton value="Proceed to Create Invoice" action="{!createInvoice}" styleClass="arrow-button" />
+             </apex:form>
+</apex:page>

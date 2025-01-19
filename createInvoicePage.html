@@ -1,0 +1,12 @@
+<template>
+    <template if:true={error}>
+        <p class="slds-text-error">{error}</p>
+    </template>
+
+    <template if:false={error}>
+      
+           
+            <lightning-button variant="brand" label="View Invoice Details" onclick={handleNavigate}></lightning-button>
+        
+    </template>
+</template>
