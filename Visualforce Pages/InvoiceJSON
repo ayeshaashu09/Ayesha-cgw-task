@@ -1,0 +1,10 @@
+<apex:page showHeader="false" sidebar="false" controller="DynamicInvoiceDetailsController">
+    <h1>Invoice JSON</h1>
+    <pre>{!$CurrentPage.parameters.jsonOutput}</pre>
+    
+    <!-- Create Invoice Button -->
+    <apex:form >
+        <apex:commandButton value="Create Invoice" action="{!createInvoice}" rerender="messages"/>
+    </apex:form>
+  
+</apex:page>
