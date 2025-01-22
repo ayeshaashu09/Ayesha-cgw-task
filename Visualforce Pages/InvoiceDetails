@@ -12,7 +12,6 @@
         </apex:pageBlock>
     </apex:form>
     
-    
      <apex:form >
         <apex:pageBlock title="Line Item Records">
             <apex:pageBlockTable value="{!relatedRecords}" var="row">
