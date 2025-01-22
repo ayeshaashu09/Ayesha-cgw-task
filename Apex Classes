@@ -1,0 +1,198 @@
+public with sharing class DynamicInvoiceDetailsController {
+    public Sobject opportunity { get; set; }
+    public List<Workshop_Article__c> relatedRecords { get; set; }
+    public List<String> opportunityFields { get; set; }
+    public List<String> relatedFields { get; set; }
+    public Map<String, String> fieldLabels { get; set; }
+    public String jsonOutput { get; set; }
+    
+    public DynamicInvoiceDetailsController() {
+        // Initialize variables
+        opportunityFields = new List<String>();
+        relatedFields = new List<String>();
+        fieldLabels = new Map<String, String>();
+        jsonOutput = ApexPages.currentPage().getParameters().get('jsonOutput');
+        
+        // Get URL parameters
+        Map<String, String> params = ApexPages.currentPage().getParameters();
+        String opportunityId = params.get('origin_record');
+        String childRelationshipName = params.get('child_relationship_name');
+        
+        // Check required parameters
+        if (String.isNotBlank(opportunityId) && String.isNotBlank(childRelationshipName)) {
+            // Extract fields for Opportunity and child object from URL parameters
+            for (String paramName : params.keySet()) {
+                if (paramName.startsWith('opp_')) {
+                    String fieldName = extractFieldName(params.get(paramName));
+                    if (String.isNotBlank(fieldName)) {
+                        String cleanedFieldName = fieldName.replace('{', '').replace('}', '').trim();
+                        opportunityFields.add(cleanedFieldName);
+                        fieldLabels.put(fieldName, getFieldLabel(Schema.SObjectType.Opportunity, cleanedFieldName));
+                    }
+                } else if (paramName.startsWith('line_item_')) {
+                    String fieldName = extractFieldName(params.get(paramName));
+                    if (String.isNotBlank(fieldName)) {
+                        String cleanedrelatedFieldName = fieldName.replace('{', '').replace('}', '').trim();
+                        relatedFields.add(cleanedrelatedFieldName);
+                        fieldLabels.put(cleanedrelatedFieldName, getFieldLabel(
+                            Schema.getGlobalDescribe().get(childRelationshipName).getDescribe(),
+                            cleanedrelatedFieldName
+                        ));
+                    }
+                }
+            }
+            // Fetch Opportunity data dynamically
+            fetchOpportunityData(opportunityId);
+            // Fetch related child records dynamically
+            fetchRelatedRecords(opportunityId, childRelationshipName);
+        } else {
+            ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, 'Missing required parameters.'));
+        }
+    }
+    
+    // Extract field name from URL parameter value
+    public String extractFieldName(String paramValue) {
+        if (String.isNotBlank(paramValue) && paramValue.contains('.')) {
+            return paramValue.substringAfterLast('.').replace('}', '').trim();
+        }
+        return paramValue.replace('}', '').trim();
+    }
+    
+    // Fetch Opportunity data dynamically
+    public void fetchOpportunityData(String opportunityId) {
+        if (!opportunityFields.isEmpty()) {
+            try {
+                String query = 'SELECT ' + String.join(opportunityFields, ', ') +
+                    ' FROM Opportunity WHERE Id = :opportunityId';
+                opportunity = (Opportunity)Database.query(query); 
+            } catch (Exception e) {
+                ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, 'Error fetching Opportunity: ' + e.getMessage()));
+            }
+        }
+    }
+    
+    // Fetch related child records dynamically
+    public void fetchRelatedRecords(String opportunityId, String childRelationshipName) {
+        if (!relatedFields.isEmpty()) {
+            try {
+                String query = 'SELECT ' + String.join(relatedFields, ', ') +
+                    ' FROM ' + childRelationshipName +
+                    ' WHERE Workshop__c = :opportunityId';
+                relatedRecords = (List<SObject>)Database.query(query);
+            } catch (Exception e) {
+                ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, 'Error fetching related records: ' + e.getMessage()));
+            }
+        }
+    }
+    
+    // Get field label for display purposes
+    public String getFieldLabel(Schema.DescribeSObjectResult objDescribe, String fieldName) {
+        try {
+            Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
+            if (fieldMap.containsKey(fieldName)) {
+                return fieldMap.get(fieldName).getDescribe().getLabel();
+            }
+        } catch (Exception e) {
+            System.debug('Error fetching field label for ' + fieldName + ': ' + e.getMessage());
+        }
+        return fieldName; // Fallback to a friendly label
+    }
+    
+    public PageReference convertToJSON() {
+        try {
+            // Create a map for the invoice data
+            Map<String, Object> invoiceData = new Map<String, Object>();
+            invoiceData.put('Invoice', opportunity); // Replace with your actual Opportunity instance
+            invoiceData.put('Line_Items', relatedRecords); // Replace with actual line item records
+            
+            // Serialize the data with indentation for better readability
+            jsonOutput = JSON.serializePretty(invoiceData); // Beautified JSON output
+            
+            // Redirect to the new page with the formatted JSON
+            String redirectUrl = '/apex/InvoiceJSONPage_New?jsonData=' + EncodingUtil.urlEncode(jsonOutput, 'UTF-8');
+            PageReference pageRef = new PageReference(redirectUrl);
+            pageRef.setRedirect(true); // Redirect to the new page
+            pageRef.getParameters().put('jsonOutput', jsonOutput);
+            
+            return pageRef; // Return the PageReference with redirection
+        } catch (Exception e) {
+            jsonOutput = 'Error generating JSON: ' + e.getMessage();
+            // Redirect to an error page if something goes wrong
+            PageReference errorPageRef = new PageReference('/apex/ErrorPage'); // Replace with your error page if applicable
+            return errorPageRef;
+        }
+    }
+    
+    public PageReference createInvoice() {
+        try {
+            // Ensure the JSON output is not null
+            if (jsonOutput == null ) {
+                ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, 'JSON output is missing.'));
+                return null;
+            }
+            
+            // Parse the JSON input
+            Map<String, Object> parsedData = (Map<String, Object>) JSON.deserializeUntyped(jsonOutput);
+            
+            // Extract Invoice details
+            Map<String, Object> invoiceData = (Map<String, Object>) parsedData.get('Invoice');
+            String opportunityId = (String) invoiceData.get('Id');
+            String accountId = (String) invoiceData.get('AccountId');
+            String invoiceDate = (String) invoiceData.get('Payment_Date__c');
+            String dueDate = (String) invoiceData.get('CloseDate');
+            
+            // Create the Invoice record
+            Invoice__c invoice = new Invoice__c(
+                Opportunity__c = opportunityId,
+                Account__c = accountId,
+                Invoice_Date__c = Date.valueOf(invoiceDate),
+                Due_Date__c = Date.valueOf(dueDate)
+            );
+            insert invoice;
+            system.debug(invoice);
+            Map<String, Object> parsedData1 = (Map<String, Object>) JSON.deserializeUntyped(jsonOutput);
+            system.debug(parsedData1);
+            // Extract Line Items
+            if (parsedData1.containsKey('Line_Items')) {
+                system.debug(parsedData1);
+               // List<Map<String, Object>> lineItemsData = (List<Map<String, Object>>) parsedData1.get('Line_Items');
+                List<Object> lineItemsRaw = (List<Object>) parsedData1.get('Line_Items');
+               List<Map<String, Object>> lineItemsData = new List<Map<String, Object>>();
+
+      for (Object item : lineItemsRaw) {
+    lineItemsData.add((Map<String, Object>) item);
+}
+                system.debug('Line Items Data: ' + lineItemsData);
+            
+            
+            system.debug(lineItemsData);
+            List<Line_Item__c> invoiceLineItems = new List<Line_Item__c>();
+            system.debug(lineItemsData);
+            for (Map<String, Object> itemData : lineItemsData) {
+                system.debug(lineItemsData);
+                system.debug(itemData);
+                invoiceLineItems.add(new Line_Item__c(
+                    Invoice__c = invoice.Id,
+                    Line_Description__c = (String) itemData.get('Description__c'),
+                    Quantity__c = (Decimal) itemData.get('Quantity__c'),
+                    Unit_Price__c = (Decimal) itemData.get('Unit_Price__c')
+                ));
+            }
+            
+            if (!invoiceLineItems.isEmpty()) {
+                insert invoiceLineItems;
+            }
+            }
+            
+            // Navigate to the newly created Invoice record
+            PageReference pageRef = new PageReference('/' + invoice.Id);
+            pageRef.setRedirect(true);
+            return pageRef;
+            
+        } catch (Exception e) {
+            ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, 'Error creating invoice: ' + e.getMessage()));
+            return null;
+        }
+    }
+    
+}
